@@ -84,6 +84,27 @@ export const BUILT_IN_LOGOS = [
       spread: 0.2,
     },
   },
+  {
+    id: 'dwd-digilab-ai',
+    name: 'DWD digilab.ai',
+    src: '/logos/dwd-digilab-ai-gelb.svg',
+    defaults: {
+      preserveColor: true,
+      tint: '#fff500',
+      removeWhite: false,
+      size: 0.24,
+      stretchX: 1,
+      stretchY: 1,
+      pulseX: 0.12,
+      pulseY: 0.08,
+      pulseSpeed: 0.18,
+      colorDrift: 0,
+      colorSpeed: 0.12,
+      instances: 1,
+      arrangement: 'single',
+      spread: 0.2,
+    },
+  },
 ];
 
 export const createOscillator = (wave = 'off', amp = 0, freq = 0.25, phase = 0, noise = 0) => ({
