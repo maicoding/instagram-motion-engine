@@ -45,6 +45,11 @@ export const BUILT_IN_LOGOS = [
     name: 'Pixel Logo',
     src: '/logos/pixel-logo.png',
   },
+  {
+    id: 'dwd-bildmarke',
+    name: 'DWD Bildmarke',
+    src: '/logos/dwd-bildmarke-blau.png',
+  },
 ];
 
 export const createOscillator = (wave = 'off', amp = 0, freq = 0.25, phase = 0, noise = 0) => ({
@@ -187,6 +192,8 @@ export const createLogoLayer = (index = 1) => ({
     tint: '#ffffff',
     preserveColor: false,
     size: 0.2,
+    stretchX: 1,
+    stretchY: 1,
     instances: 3,
     spread: 0.32,
     arrangement: 'line',
@@ -221,6 +228,8 @@ export const createImageLayer = (index = 1) => ({
     tint: '#83ffe0',
     preserveColor: true,
     size: 0.34,
+    stretchX: 1,
+    stretchY: 1,
     instances: 1,
     spread: 0.18,
     arrangement: 'single',

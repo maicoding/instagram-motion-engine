@@ -736,6 +736,10 @@ const App = () => {
                   <SliderField label="Size" value={activeLayer.logo.size} min={0.05} max={0.5} step={0.01} format={(value) => `${Math.round(value * 100)}%`} onChange={(value) => updateLayer(activeLayer.id, 'logo.size', value)} />
                   <SliderField label="Spread" value={activeLayer.logo.spread} min={0} max={0.8} step={0.01} format={(value) => `${Math.round(value * 100)}%`} onChange={(value) => updateLayer(activeLayer.id, 'logo.spread', value)} />
                 </div>
+                <div className="field-grid">
+                  <SliderField label="Stretch X" value={activeLayer.logo.stretchX} min={0.35} max={2.5} step={0.01} format={(value) => `${value.toFixed(2)}x`} onChange={(value) => updateLayer(activeLayer.id, 'logo.stretchX', value)} />
+                  <SliderField label="Stretch Y" value={activeLayer.logo.stretchY} min={0.35} max={2.5} step={0.01} format={(value) => `${value.toFixed(2)}x`} onChange={(value) => updateLayer(activeLayer.id, 'logo.stretchY', value)} />
+                </div>
               </Section>
             )}
 
@@ -765,6 +769,10 @@ const App = () => {
                 <div className="field-grid">
                   <SliderField label="Size" value={activeLayer.image.size} min={0.05} max={0.6} step={0.01} format={(value) => `${Math.round(value * 100)}%`} onChange={(value) => updateLayer(activeLayer.id, 'image.size', value)} />
                   <SliderField label="Spread" value={activeLayer.image.spread} min={0} max={0.8} step={0.01} format={(value) => `${Math.round(value * 100)}%`} onChange={(value) => updateLayer(activeLayer.id, 'image.spread', value)} />
+                </div>
+                <div className="field-grid">
+                  <SliderField label="Stretch X" value={activeLayer.image.stretchX} min={0.35} max={2.5} step={0.01} format={(value) => `${value.toFixed(2)}x`} onChange={(value) => updateLayer(activeLayer.id, 'image.stretchX', value)} />
+                  <SliderField label="Stretch Y" value={activeLayer.image.stretchY} min={0.35} max={2.5} step={0.01} format={(value) => `${value.toFixed(2)}x`} onChange={(value) => updateLayer(activeLayer.id, 'image.stretchY', value)} />
                 </div>
               </Section>
             )}

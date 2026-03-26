@@ -297,8 +297,8 @@ const drawAssetLayer = (ctx, layer, width, height, state, image, settings) => {
     const jitterY = layer.fx.jitter * smoothNoise(state.time * 3.1 + index, seed + index * 29);
     const size = minDim * settings.size * state.scale * offset.scale;
     const ratio = tintTarget.width / tintTarget.height;
-    const drawWidth = size;
-    const drawHeight = size / ratio;
+    const drawWidth = size * (settings.stretchX || 1);
+    const drawHeight = (size / ratio) * (settings.stretchY || 1);
     const drawX = (state.x + offset.x + jitterX) * width;
     const drawY = (state.y + offset.y + jitterY) * height;
     ctx.save();
