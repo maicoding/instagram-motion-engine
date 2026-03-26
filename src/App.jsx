@@ -146,6 +146,7 @@ const App = () => {
   const [activeLayerId, setActiveLayerId] = useState(initialScene.layers[0]?.id ?? null);
   const [logoLibrary, setLogoLibrary] = useState(BUILT_IN_LOGOS);
   const [assetVersion, setAssetVersion] = useState(0);
+  const [previewZoom, setPreviewZoom] = useState(1);
   const imageCacheRef = useRef(new Map());
   const canvasRef = useRef(null);
   const stageRef = useRef(null);
@@ -179,15 +180,15 @@ const App = () => {
 
   const previewScale = useMemo(() => {
     if (!stageSize.width || !stageSize.height) {
-      return 0.3;
+      return 0.3 * previewZoom;
     }
     const margin = 96;
     return Math.min(
       (stageSize.width - margin) / preset.width,
       (stageSize.height - 160) / preset.height,
       1,
-    );
-  }, [preset.height, preset.width, stageSize.height, stageSize.width]);
+    ) * previewZoom;
+  }, [preset.height, preset.width, previewZoom, stageSize.height, stageSize.width]);
 
   const updateScene = (path, value) => setScene((current) => deepSet(current, path, value));
 
@@ -235,6 +236,45 @@ const App = () => {
       const layer = maker(current.layers.filter((item) => item.kind === kind).length + 1);
       setActiveLayerId(layer.id);
       return { ...current, layers: [...current.layers, layer] };
+    });
+  };
+
+  const applyLogoPresetToLayer = (layerId, entry) => {
+    replaceLayer(layerId, (layer) => {
+      if (layer.kind !== 'logo') {
+        return layer;
+      }
+      return {
+        ...layer,
+        assetSrc: entry.src,
+        assetName: entry.name,
+        logo: {
+          ...layer.logo,
+          ...(entry.defaults ?? {}),
+        },
+      };
+    });
+  };
+
+  const applyLogoEntry = (entry) => {
+    if (activeLayer?.kind === 'logo') {
+      applyLogoPresetToLayer(activeLayer.id, entry);
+      return;
+    }
+
+    setScene((current) => {
+      const freshLayer = createLogoLayer(current.layers.filter((item) => item.kind === 'logo').length + 1);
+      const nextLayer = {
+        ...freshLayer,
+        assetSrc: entry.src,
+        assetName: entry.name,
+        logo: {
+          ...freshLayer.logo,
+          ...(entry.defaults ?? {}),
+        },
+      };
+      setActiveLayerId(nextLayer.id);
+      return { ...current, layers: [...current.layers, nextLayer] };
     });
   };
 
@@ -475,18 +515,17 @@ const App = () => {
             <SliderField label="Angle" value={scene.background.angle} min={0} max={360} step={1} format={(value) => `${Math.round(value)}°`} onChange={(value) => updateScene('background.angle', value)} />
           </div>
           <div className="background-preview" style={{ background: `linear-gradient(${scene.background.angle}deg, ${scene.background.colorA} 0%, ${scene.background.colorB} 55%, ${scene.background.colorC} 100%)` }} />
-          {scene.background.mode === 'image' && (
-            <UploadButton
-              label={scene.background.imageSrc ? 'Background austauschen' : 'Background laden'}
-              accept="image/*"
-              onSelect={(event) =>
-                handleAssetUpload(event, ({ src }) => {
-                  updateScene('background.imageSrc', src);
-                  updateScene('background.mode', 'image');
-                })
-              }
-            />
-          )}
+          <UploadButton
+            label={scene.background.imageSrc ? 'Background austauschen' : 'Background laden'}
+            accept="image/*"
+            onSelect={(event) =>
+              handleAssetUpload(event, ({ src }) => {
+                updateScene('background.imageSrc', src);
+                updateScene('background.mode', 'image');
+              })
+            }
+          />
+          {scene.background.imageSrc && <div className="asset-note">Image-Background geladen</div>}
           <SliderField label="Vignette" value={scene.background.vignette} min={0} max={0.7} step={0.01} format={(value) => `${Math.round(value * 100)}%`} onChange={(value) => updateScene('background.vignette', value)} />
           <div className="field-grid">
             <SliderField label="Scanlines" value={scene.globalFx.scanlines} min={0} max={0.6} step={0.01} format={(value) => `${Math.round(value * 100)}%`} onChange={(value) => updateScene('globalFx.scanlines', value)} />
@@ -505,12 +544,7 @@ const App = () => {
               <button
                 key={logo.id}
                 className={`library-card ${activeLayer?.assetSrc === logo.src ? 'is-active' : ''}`}
-                onClick={() => {
-                  if (activeLayer?.kind === 'logo') {
-                    updateLayer(activeLayer.id, 'assetSrc', logo.src);
-                    updateLayer(activeLayer.id, 'assetName', logo.name);
-                  }
-                }}
+                onClick={() => applyLogoEntry(logo)}
               >
                 <img src={logo.src} alt={logo.name} />
                 <span>{logo.name}</span>
@@ -526,12 +560,18 @@ const App = () => {
                   id: `logo_${Math.random().toString(36).slice(2, 9)}`,
                   name: file.name.replace(/\.[^.]+$/, ''),
                   src,
+                  defaults: {
+                    preserveColor: false,
+                    tint: '#ffffff',
+                    removeWhite: true,
+                    whiteThreshold: 238,
+                    size: 0.2,
+                    stretchX: 1,
+                    stretchY: 1,
+                  },
                 };
                 setLogoLibrary((current) => [...current, entry]);
-                if (activeLayer?.kind === 'logo') {
-                  updateLayer(activeLayer.id, 'assetSrc', entry.src);
-                  updateLayer(activeLayer.id, 'assetName', entry.name);
-                }
+                applyLogoEntry(entry);
               })
             }
           />
@@ -717,16 +757,25 @@ const App = () => {
                   options={logoLibrary.map((logo) => ({ value: logo.src, label: logo.name }))}
                   onChange={(value) => {
                     const entry = logoLibrary.find((logo) => logo.src === value);
-                    updateLayer(activeLayer.id, 'assetSrc', value);
-                    updateLayer(activeLayer.id, 'assetName', entry?.name ?? 'Logo');
+                    if (entry) {
+                      applyLogoPresetToLayer(activeLayer.id, entry);
+                    }
                   }}
                 />
+                <div className="asset-note">{activeLayer.assetName || 'Kein Logo aktiv'}</div>
                 <div className="field-grid">
                   <ColorField label="Tint" value={activeLayer.logo.tint} onChange={(value) => updateLayer(activeLayer.id, 'logo.tint', value)} />
                   <label className="toggle">
                     <span>Originalfarben</span>
                     <input type="checkbox" checked={activeLayer.logo.preserveColor} onChange={(event) => updateLayer(activeLayer.id, 'logo.preserveColor', event.target.checked)} />
                   </label>
+                </div>
+                <div className="field-grid">
+                  <label className="toggle">
+                    <span>Weiss freistellen</span>
+                    <input type="checkbox" checked={activeLayer.logo.removeWhite} onChange={(event) => updateLayer(activeLayer.id, 'logo.removeWhite', event.target.checked)} />
+                  </label>
+                  <SliderField label="Threshold" value={activeLayer.logo.whiteThreshold} min={180} max={250} step={1} format={(value) => `${value}`} onChange={(value) => updateLayer(activeLayer.id, 'logo.whiteThreshold', value)} />
                 </div>
                 <div className="field-grid">
                   <SelectField label="Arrangement" value={activeLayer.logo.arrangement} options={ARRANGEMENTS} onChange={(value) => updateLayer(activeLayer.id, 'logo.arrangement', value)} />
@@ -740,6 +789,15 @@ const App = () => {
                   <SliderField label="Stretch X" value={activeLayer.logo.stretchX} min={0.35} max={2.5} step={0.01} format={(value) => `${value.toFixed(2)}x`} onChange={(value) => updateLayer(activeLayer.id, 'logo.stretchX', value)} />
                   <SliderField label="Stretch Y" value={activeLayer.logo.stretchY} min={0.35} max={2.5} step={0.01} format={(value) => `${value.toFixed(2)}x`} onChange={(value) => updateLayer(activeLayer.id, 'logo.stretchY', value)} />
                 </div>
+                <div className="field-grid">
+                  <SliderField label="Pulse X" value={activeLayer.logo.pulseX} min={0} max={0.8} step={0.01} format={(value) => `${value.toFixed(2)}`} onChange={(value) => updateLayer(activeLayer.id, 'logo.pulseX', value)} />
+                  <SliderField label="Pulse Y" value={activeLayer.logo.pulseY} min={0} max={0.8} step={0.01} format={(value) => `${value.toFixed(2)}`} onChange={(value) => updateLayer(activeLayer.id, 'logo.pulseY', value)} />
+                </div>
+                <div className="field-grid">
+                  <SliderField label="Pulse Speed" value={activeLayer.logo.pulseSpeed} min={0.01} max={1.5} step={0.01} format={(value) => `${value.toFixed(2)}hz`} onChange={(value) => updateLayer(activeLayer.id, 'logo.pulseSpeed', value)} />
+                  <SliderField label="Color Drift" value={activeLayer.logo.colorDrift} min={0} max={180} step={1} format={(value) => `${Math.round(value)}°`} onChange={(value) => updateLayer(activeLayer.id, 'logo.colorDrift', value)} />
+                </div>
+                <SliderField label="Color Speed" value={activeLayer.logo.colorSpeed} min={0.01} max={1.5} step={0.01} format={(value) => `${value.toFixed(2)}hz`} onChange={(value) => updateLayer(activeLayer.id, 'logo.colorSpeed', value)} />
               </Section>
             )}
 
@@ -755,12 +813,20 @@ const App = () => {
                     })
                   }
                 />
+                <div className="asset-note">{activeLayer.assetName || 'Kein Bild aktiv'}</div>
                 <div className="field-grid">
                   <ColorField label="Tint" value={activeLayer.image.tint} onChange={(value) => updateLayer(activeLayer.id, 'image.tint', value)} />
                   <label className="toggle">
                     <span>Originalfarben</span>
                     <input type="checkbox" checked={activeLayer.image.preserveColor} onChange={(event) => updateLayer(activeLayer.id, 'image.preserveColor', event.target.checked)} />
                   </label>
+                </div>
+                <div className="field-grid">
+                  <label className="toggle">
+                    <span>Weiss freistellen</span>
+                    <input type="checkbox" checked={activeLayer.image.removeWhite} onChange={(event) => updateLayer(activeLayer.id, 'image.removeWhite', event.target.checked)} />
+                  </label>
+                  <SliderField label="Threshold" value={activeLayer.image.whiteThreshold} min={180} max={250} step={1} format={(value) => `${value}`} onChange={(value) => updateLayer(activeLayer.id, 'image.whiteThreshold', value)} />
                 </div>
                 <div className="field-grid">
                   <SelectField label="Arrangement" value={activeLayer.image.arrangement} options={ARRANGEMENTS} onChange={(value) => updateLayer(activeLayer.id, 'image.arrangement', value)} />
@@ -774,6 +840,11 @@ const App = () => {
                   <SliderField label="Stretch X" value={activeLayer.image.stretchX} min={0.35} max={2.5} step={0.01} format={(value) => `${value.toFixed(2)}x`} onChange={(value) => updateLayer(activeLayer.id, 'image.stretchX', value)} />
                   <SliderField label="Stretch Y" value={activeLayer.image.stretchY} min={0.35} max={2.5} step={0.01} format={(value) => `${value.toFixed(2)}x`} onChange={(value) => updateLayer(activeLayer.id, 'image.stretchY', value)} />
                 </div>
+                <div className="field-grid">
+                  <SliderField label="Pulse X" value={activeLayer.image.pulseX} min={0} max={0.8} step={0.01} format={(value) => `${value.toFixed(2)}`} onChange={(value) => updateLayer(activeLayer.id, 'image.pulseX', value)} />
+                  <SliderField label="Pulse Y" value={activeLayer.image.pulseY} min={0} max={0.8} step={0.01} format={(value) => `${value.toFixed(2)}`} onChange={(value) => updateLayer(activeLayer.id, 'image.pulseY', value)} />
+                </div>
+                <SliderField label="Pulse Speed" value={activeLayer.image.pulseSpeed} min={0.01} max={1.5} step={0.01} format={(value) => `${value.toFixed(2)}hz`} onChange={(value) => updateLayer(activeLayer.id, 'image.pulseSpeed', value)} />
               </Section>
             )}
           </>
@@ -792,6 +863,10 @@ const App = () => {
               <Grid2x2 size={15} />
               Grid
             </button>
+            <label className="zoom-control">
+              <span>Zoom</span>
+              <input type="range" min="0.5" max="1.8" step="0.01" value={previewZoom} onChange={(event) => setPreviewZoom(Number(event.target.value))} />
+            </label>
             <button className="ghost-button" onClick={() => exportFrame('png')}>
               <Download size={15} />
               PNG

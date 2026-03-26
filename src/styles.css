@@ -260,6 +260,15 @@ textarea {
   gap: 10px;
 }
 
+.asset-note {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
 .library-card {
   display: flex;
   flex-direction: column;
@@ -290,6 +299,8 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: 360px;
+  overflow: auto;
 }
 
 .layer-item {
@@ -455,6 +466,25 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.zoom-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 180px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-soft);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+}
+
+.zoom-control input {
+  flex: 1;
 }
 
 .mode-chip {

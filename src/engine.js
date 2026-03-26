@@ -30,6 +30,8 @@ const smoothNoise = (time, seed) => {
   return (a + b + c) / 1.7;
 };
 
+const clampByte = (value) => Math.max(0, Math.min(255, Math.round(value)));
+
 const stringSeed = (value) =>
   [...String(value)].reduce((acc, char, index) => acc + char.charCodeAt(0) * (index + 1), 0) || 1;
 
@@ -129,8 +131,97 @@ const getInstanceOffset = (arrangement, index, count, spread, seed) => {
   };
 };
 
-const getTintedImage = (image, color) => {
-  const key = `${image.src || image.width}:${color}:${image.width}:${image.height}`;
+const hexToRgb = (hex) => {
+  const normalized = hex.replace('#', '');
+  const safe = normalized.length === 3
+    ? normalized.split('').map((char) => char + char).join('')
+    : normalized;
+  const int = Number.parseInt(safe, 16);
+  return {
+    r: (int >> 16) & 255,
+    g: (int >> 8) & 255,
+    b: int & 255,
+  };
+};
+
+const rgbToHsl = ({ r, g, b }) => {
+  const nr = r / 255;
+  const ng = g / 255;
+  const nb = b / 255;
+  const max = Math.max(nr, ng, nb);
+  const min = Math.min(nr, ng, nb);
+  const lightness = (max + min) / 2;
+
+  if (max === min) {
+    return { h: 0, s: 0, l: lightness };
+  }
+
+  const d = max - min;
+  const saturation = lightness > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let hue = 0;
+  switch (max) {
+    case nr:
+      hue = (ng - nb) / d + (ng < nb ? 6 : 0);
+      break;
+    case ng:
+      hue = (nb - nr) / d + 2;
+      break;
+    default:
+      hue = (nr - ng) / d + 4;
+      break;
+  }
+  hue /= 6;
+  return { h: hue, s: saturation, l: lightness };
+};
+
+const hslToRgb = ({ h, s, l }) => {
+  if (s === 0) {
+    const value = clampByte(l * 255);
+    return { r: value, g: value, b: value };
+  }
+
+  const hueToRgb = (p, q, t) => {
+    let temp = t;
+    if (temp < 0) temp += 1;
+    if (temp > 1) temp -= 1;
+    if (temp < 1 / 6) return p + (q - p) * 6 * temp;
+    if (temp < 1 / 2) return q;
+    if (temp < 2 / 3) return p + (q - p) * (2 / 3 - temp) * 6;
+    return p;
+  };
+
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return {
+    r: clampByte(hueToRgb(p, q, h + 1 / 3) * 255),
+    g: clampByte(hueToRgb(p, q, h) * 255),
+    b: clampByte(hueToRgb(p, q, h - 1 / 3) * 255),
+  };
+};
+
+const rgbToHex = ({ r, g, b }) =>
+  `#${[r, g, b].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+
+const shiftHexHue = (hex, degrees) => {
+  const hsl = rgbToHsl(hexToRgb(hex));
+  return rgbToHex({
+    ...hslToRgb({
+      ...hsl,
+      h: fract(hsl.h + degrees / 360),
+    }),
+  });
+};
+
+const getProcessedAsset = (image, settings, color) => {
+  const key = [
+    image.src || image.width,
+    color,
+    settings.preserveColor,
+    settings.removeWhite,
+    settings.whiteThreshold,
+    image.width,
+    image.height,
+  ].join(':');
   const cached = tintCache.get(key);
   if (cached) {
     return cached;
@@ -140,11 +231,32 @@ const getTintedImage = (image, color) => {
   canvas.height = image.height;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(image, 0, 0);
-  ctx.globalCompositeOperation = 'source-atop';
-  ctx.fillStyle = color;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.globalCompositeOperation = 'destination-in';
-  ctx.drawImage(image, 0, 0);
+
+  if (settings.removeWhite) {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const threshold = settings.whiteThreshold ?? 235;
+    const fadeStart = threshold - 32;
+    for (let index = 0; index < imageData.data.length; index += 4) {
+      const r = imageData.data[index];
+      const g = imageData.data[index + 1];
+      const b = imageData.data[index + 2];
+      const a = imageData.data[index + 3];
+      const luma = (r + g + b) / 3;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      if (luma >= fadeStart && chroma <= 38) {
+        const mix = clamp((luma - fadeStart) / Math.max(1, threshold + 12 - fadeStart), 0, 1);
+        imageData.data[index + 3] = clampByte(a * (1 - mix));
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  if (!settings.preserveColor) {
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
   tintCache.set(key, canvas);
   return canvas;
 };
@@ -289,16 +401,23 @@ const drawAssetLayer = (ctx, layer, width, height, state, image, settings) => {
   const count = Math.max(1, settings.instances);
   const seed = stringSeed(layer.id);
   const minDim = Math.min(width, height);
-  const tintTarget = settings.preserveColor ? image : getTintedImage(image, settings.tint);
 
   for (let index = 0; index < count; index += 1) {
     const offset = getInstanceOffset(settings.arrangement, index, count, settings.spread, seed);
     const jitterX = layer.fx.jitter * smoothNoise(state.time * 2.8 + index, seed + index * 23);
     const jitterY = layer.fx.jitter * smoothNoise(state.time * 3.1 + index, seed + index * 29);
     const size = minDim * settings.size * state.scale * offset.scale;
-    const ratio = tintTarget.width / tintTarget.height;
-    const drawWidth = size * (settings.stretchX || 1);
-    const drawHeight = (size / ratio) * (settings.stretchY || 1);
+    const stretchFactor = sampleWave('sine', state.time * settings.pulseSpeed + index * 0.07, 0);
+    const colorFactor = sampleWave('sine', state.time * (settings.colorSpeed || settings.pulseSpeed || 0.2) + index * 0.05, 0.11);
+    const dynamicTint = settings.colorDrift
+      ? shiftHexHue(settings.tint, colorFactor * settings.colorDrift)
+      : settings.tint;
+    const renderTarget = getProcessedAsset(image, settings, dynamicTint);
+    const stretchX = Math.max(0.12, (settings.stretchX || 1) * (1 + stretchFactor * (settings.pulseX || 0)));
+    const stretchY = Math.max(0.12, (settings.stretchY || 1) * (1 + sampleWave('triangle', state.time * settings.pulseSpeed + index * 0.09, 0.17) * (settings.pulseY || 0)));
+    const ratio = renderTarget.width / renderTarget.height;
+    const drawWidth = size * stretchX;
+    const drawHeight = (size / ratio) * stretchY;
     const drawX = (state.x + offset.x + jitterX) * width;
     const drawY = (state.y + offset.y + jitterY) * height;
     ctx.save();
@@ -306,11 +425,11 @@ const drawAssetLayer = (ctx, layer, width, height, state, image, settings) => {
     ctx.rotate((state.rotation * Math.PI) / 180 + offset.rotation * 0.45);
     if (layer.fx.glitch > 0) {
       ctx.globalAlpha *= 0.35;
-      ctx.drawImage(tintTarget, -drawWidth / 2 - layer.fx.glitch * 18, -drawHeight / 2, drawWidth, drawHeight);
-      ctx.drawImage(tintTarget, -drawWidth / 2 + layer.fx.glitch * 18, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.drawImage(renderTarget, -drawWidth / 2 - layer.fx.glitch * 18, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.drawImage(renderTarget, -drawWidth / 2 + layer.fx.glitch * 18, -drawHeight / 2, drawWidth, drawHeight);
       ctx.globalAlpha /= 0.35;
     }
-    ctx.drawImage(tintTarget, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.drawImage(renderTarget, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     ctx.restore();
   }
 };
