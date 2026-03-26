@@ -120,6 +120,26 @@ const Section = ({ title, icon: Icon, children }) => (
   </section>
 );
 
+const UploadButton = ({ label, accept, onSelect }) => {
+  const inputRef = useRef(null);
+
+  return (
+    <div className="upload-tile">
+      <button className="ghost-button upload-button" type="button" onClick={() => inputRef.current?.click()}>
+        <Upload size={16} />
+        {label}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="sr-only"
+        onChange={(event) => onSelect(event)}
+      />
+    </div>
+  );
+};
+
 const App = () => {
   const initialScene = useMemo(() => createInitialScene(), []);
   const [scene, setScene] = useState(initialScene);
@@ -430,16 +450,22 @@ const App = () => {
         </Section>
 
         <Section title="Background & Global FX" icon={Sparkles}>
-          <SelectField
-            label="Background"
-            value={scene.background.mode}
-            options={[
+          <div className="mode-row">
+            {[
               { value: 'gradient', label: 'Gradient' },
               { value: 'solid', label: 'Solid' },
               { value: 'image', label: 'Image' },
-            ]}
-            onChange={(value) => updateScene('background.mode', value)}
-          />
+            ].map((mode) => (
+              <button
+                key={mode.value}
+                type="button"
+                className={`mode-chip ${scene.background.mode === mode.value ? 'is-active' : ''}`}
+                onClick={() => updateScene('background.mode', mode.value)}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
           <div className="field-grid">
             <ColorField label="Color A" value={scene.background.colorA} onChange={(value) => updateScene('background.colorA', value)} />
             <ColorField label="Color B" value={scene.background.colorB} onChange={(value) => updateScene('background.colorB', value)} />
@@ -448,21 +474,18 @@ const App = () => {
             <ColorField label="Color C" value={scene.background.colorC} onChange={(value) => updateScene('background.colorC', value)} />
             <SliderField label="Angle" value={scene.background.angle} min={0} max={360} step={1} format={(value) => `${Math.round(value)}°`} onChange={(value) => updateScene('background.angle', value)} />
           </div>
+          <div className="background-preview" style={{ background: `linear-gradient(${scene.background.angle}deg, ${scene.background.colorA} 0%, ${scene.background.colorB} 55%, ${scene.background.colorC} 100%)` }} />
           {scene.background.mode === 'image' && (
-            <label className="upload-tile">
-              <Upload size={16} />
-              <span>{scene.background.imageSrc ? 'Background austauschen' : 'Background laden'}</span>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(event) =>
-                  handleAssetUpload(event, ({ src }) => {
-                    updateScene('background.imageSrc', src);
-                    updateScene('background.mode', 'image');
-                  })
-                }
-              />
-            </label>
+            <UploadButton
+              label={scene.background.imageSrc ? 'Background austauschen' : 'Background laden'}
+              accept="image/*"
+              onSelect={(event) =>
+                handleAssetUpload(event, ({ src }) => {
+                  updateScene('background.imageSrc', src);
+                  updateScene('background.mode', 'image');
+                })
+              }
+            />
           )}
           <SliderField label="Vignette" value={scene.background.vignette} min={0} max={0.7} step={0.01} format={(value) => `${Math.round(value * 100)}%`} onChange={(value) => updateScene('background.vignette', value)} />
           <div className="field-grid">
@@ -494,28 +517,24 @@ const App = () => {
               </button>
             ))}
           </div>
-          <label className="upload-tile">
-            <Upload size={16} />
-            <span>Weiteres Logo einbauen</span>
-            <input
-              type="file"
-              accept="image/*,.svg"
-              onChange={(event) =>
-                handleAssetUpload(event, ({ file, src }) => {
-                  const entry = {
-                    id: `logo_${Math.random().toString(36).slice(2, 9)}`,
-                    name: file.name.replace(/\.[^.]+$/, ''),
-                    src,
-                  };
-                  setLogoLibrary((current) => [...current, entry]);
-                  if (activeLayer?.kind === 'logo') {
-                    updateLayer(activeLayer.id, 'assetSrc', entry.src);
-                    updateLayer(activeLayer.id, 'assetName', entry.name);
-                  }
-                })
-              }
-            />
-          </label>
+          <UploadButton
+            label="Weiteres Logo einbauen"
+            accept="image/*,.svg"
+            onSelect={(event) =>
+              handleAssetUpload(event, ({ file, src }) => {
+                const entry = {
+                  id: `logo_${Math.random().toString(36).slice(2, 9)}`,
+                  name: file.name.replace(/\.[^.]+$/, ''),
+                  src,
+                };
+                setLogoLibrary((current) => [...current, entry]);
+                if (activeLayer?.kind === 'logo') {
+                  updateLayer(activeLayer.id, 'assetSrc', entry.src);
+                  updateLayer(activeLayer.id, 'assetName', entry.name);
+                }
+              })
+            }
+          />
         </Section>
 
         <Section title="Layer Stack" icon={Layers}>
@@ -722,20 +741,16 @@ const App = () => {
 
             {activeLayer.kind === 'image' && (
               <Section title="Image Settings" icon={ImagePlus}>
-                <label className="upload-tile">
-                  <Upload size={16} />
-                  <span>{activeLayer.assetSrc ? 'Bild austauschen' : 'Bild hochladen'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) =>
-                      handleAssetUpload(event, ({ file, src }) => {
-                        updateLayer(activeLayer.id, 'assetSrc', src);
-                        updateLayer(activeLayer.id, 'assetName', file.name);
-                      })
-                    }
-                  />
-                </label>
+                <UploadButton
+                  label={activeLayer.assetSrc ? 'Bild austauschen' : 'Bild hochladen'}
+                  accept="image/*"
+                  onSelect={(event) =>
+                    handleAssetUpload(event, ({ file, src }) => {
+                      updateLayer(activeLayer.id, 'assetSrc', src);
+                      updateLayer(activeLayer.id, 'assetName', file.name);
+                    })
+                  }
+                />
                 <div className="field-grid">
                   <ColorField label="Tint" value={activeLayer.image.tint} onChange={(value) => updateLayer(activeLayer.id, 'image.tint', value)} />
                   <label className="toggle">
